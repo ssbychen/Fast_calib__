@@ -9,13 +9,14 @@ which is included as part of this source code package.
 #define COMMON_LIB_H
 #define PCL_NO_PRECOMPILE
 
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/common/transforms.h>
-#include <pcl_ros/point_cloud.h>
-#include <pcl_ros/filters/passthrough.h>
+#include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/features/boundary.h>
@@ -26,7 +27,6 @@ which is included as part of this source code package.
 #include <pcl/registration/transformation_estimation_svd.h>
 #include <cmath>
 #include <opencv2/opencv.hpp>
-#include <tf/tf.h>
 #include "color.h"
 
 using namespace std;
@@ -37,13 +37,12 @@ using namespace pcl;
 #define DEBUG 1
 #define GEOMETRY_TOLERANCE 0.08
 
-// ===== 自定义点类型：XYZ + ring =====
 namespace Common 
 {
   struct Point
   {
-    PCL_ADD_POINT4D;            // quad-word XYZ + padding
-    std::uint16_t ring = 0;     // 线号（机械雷达/多线雷达）
+    PCL_ADD_POINT4D;
+    std::uint16_t ring = 0;
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   } EIGEN_ALIGN16;
 }
@@ -54,7 +53,6 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(Common::Point,
   (std::uint16_t, ring, ring)
 );
 
-// 参数结构体
 struct Params {
   double x_min, x_max, y_min, y_max, z_min, z_max;
   double fx, fy, cx, cy, k1, k2, p1, p2;
@@ -64,41 +62,75 @@ struct Params {
   string image_path;
   string bag_path;
   string lidar_topic;
+  string image_topic;
   string output_path;
 };
 
-// 读取参数
-Params loadParameters(ros::NodeHandle &nh) {
+inline Params loadParameters(rclcpp::Node::SharedPtr node) {
   Params params;
-  nh.param("fx", params.fx, 1215.31801774424);
-  nh.param("fy", params.fy, 1214.72961288138);
-  nh.param("cx", params.cx, 1047.86571859677);
-  nh.param("cy", params.cy, 745.068353101898);
-  nh.param("k1", params.k1, -0.33574781188503);
-  nh.param("k2", params.k2, 0.10996870793601);
-  nh.param("p1", params.p1, 0.000157303079833973);
-  nh.param("p2", params.p2, 0.000544930726278493);
-  nh.param("marker_size", params.marker_size, 0.2);
-  nh.param("delta_width_qr_center", params.delta_width_qr_center, 0.55);
-  nh.param("delta_height_qr_center", params.delta_height_qr_center, 0.35);
-  nh.param("delta_width_circles", params.delta_width_circles, 0.5);
-  nh.param("delta_height_circles", params.delta_height_circles, 0.4);
-  nh.param("min_detected_markers", params.min_detected_markers, 3);
-  nh.param("circle_radius", params.circle_radius, 0.12);
-  nh.param("image_path", params.image_path, string("/home/chunran/calib_ws/src/fast_calib/data/image.png"));
-  nh.param("bag_path", params.bag_path, string("/home/chunran/calib_ws/src/fast_calib/data/input.bag"));
-  nh.param("lidar_topic", params.lidar_topic, string("/livox/lidar"));
-  nh.param("output_path", params.output_path, string("/home/chunran/calib_ws/src/fast_calib/output"));
-  nh.param("x_min", params.x_min, 1.5);
-  nh.param("x_max", params.x_max, 3.0);
-  nh.param("y_min", params.y_min, -1.5);
-  nh.param("y_max", params.y_max, 2.0);
-  nh.param("z_min", params.z_min, -0.5);
-  nh.param("z_max", params.z_max, 2.0);
+
+  auto declare = [&](const std::string& name, auto default_val) {
+    node->declare_parameter(name, default_val);
+  };
+
+  declare("fx", 1215.31801774424);
+  declare("fy", 1214.72961288138);
+  declare("cx", 1047.86571859677);
+  declare("cy", 745.068353101898);
+  declare("k1", -0.33574781188503);
+  declare("k2", 0.10996870793601);
+  declare("p1", 0.000157303079833973);
+  declare("p2", 0.000544930726278493);
+  declare("marker_size", 0.2);
+  declare("delta_width_qr_center", 0.55);
+  declare("delta_height_qr_center", 0.35);
+  declare("delta_width_circles", 0.5);
+  declare("delta_height_circles", 0.4);
+  declare("min_detected_markers", 3);
+  declare("circle_radius", 0.12);
+  declare("image_path", std::string(""));
+  declare("bag_path", std::string(""));
+  declare("lidar_topic", std::string("/rslidar_points"));
+  declare("image_topic", std::string("/camera/image_raw"));
+  declare("output_path", std::string("output"));
+  declare("x_min", 1.5);
+  declare("x_max", 3.0);
+  declare("y_min", -1.5);
+  declare("y_max", 2.0);
+  declare("z_min", -0.5);
+  declare("z_max", 2.0);
+
+  node->get_parameter("fx", params.fx);
+  node->get_parameter("fy", params.fy);
+  node->get_parameter("cx", params.cx);
+  node->get_parameter("cy", params.cy);
+  node->get_parameter("k1", params.k1);
+  node->get_parameter("k2", params.k2);
+  node->get_parameter("p1", params.p1);
+  node->get_parameter("p2", params.p2);
+  node->get_parameter("marker_size", params.marker_size);
+  node->get_parameter("delta_width_qr_center", params.delta_width_qr_center);
+  node->get_parameter("delta_height_qr_center", params.delta_height_qr_center);
+  node->get_parameter("delta_width_circles", params.delta_width_circles);
+  node->get_parameter("delta_height_circles", params.delta_height_circles);
+  node->get_parameter("min_detected_markers", params.min_detected_markers);
+  node->get_parameter("circle_radius", params.circle_radius);
+  node->get_parameter("image_path", params.image_path);
+  node->get_parameter("bag_path", params.bag_path);
+  node->get_parameter("lidar_topic", params.lidar_topic);
+  node->get_parameter("image_topic", params.image_topic);
+  node->get_parameter("output_path", params.output_path);
+  node->get_parameter("x_min", params.x_min);
+  node->get_parameter("x_max", params.x_max);
+  node->get_parameter("y_min", params.y_min);
+  node->get_parameter("y_max", params.y_max);
+  node->get_parameter("z_min", params.z_min);
+  node->get_parameter("z_max", params.z_max);
+
   return params;
 }
 
-double computeRMSE(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud1, 
+inline double computeRMSE(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud1, 
                    const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud2) 
 {
     if (cloud1->size() != cloud2->size()) 
@@ -121,8 +153,7 @@ double computeRMSE(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud1,
     return std::sqrt(mse);
 }
 
-// 将 LiDAR 点云转换到 QR 码坐标系
-void alignPointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
+inline void alignPointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
   pcl::PointCloud<pcl::PointXYZ>::Ptr &output_cloud, const Eigen::Matrix4f &transformation) 
 {
   output_cloud->clear();
@@ -134,7 +165,7 @@ void alignPointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
   }
 }
 
-void comb(int N, int K, std::vector<std::vector<int>> &groups) {
+inline void comb(int N, int K, std::vector<std::vector<int>> &groups) {
   int upper_factorial = 1;
   int lower_factorial = 1;
 
@@ -148,13 +179,12 @@ void comb(int N, int K, std::vector<std::vector<int>> &groups) {
     cout << N << " centers found. Iterating over " << n_permutations
          << " possible sets of candidates" << endl;
 
-  std::string bitmask(K, 1);  // K leading 1's
-  bitmask.resize(N, 0);       // N-K trailing 0's
+  std::string bitmask(K, 1);
+  bitmask.resize(N, 0);
 
-  // print integers and permute bitmask
   do {
     std::vector<int> group;
-    for (int i = 0; i < N; ++i)  // [0..N-1] integers
+    for (int i = 0; i < N; ++i)
     {
       if (bitmask[i]) {
         group.push_back(i);
@@ -163,10 +193,10 @@ void comb(int N, int K, std::vector<std::vector<int>> &groups) {
     groups.push_back(group);
   } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
 
-  assert(groups.size() == n_permutations);
+  assert(static_cast<int>(groups.size()) == n_permutations);
 }
 
-void projectPointCloudToImage(const pcl::PointCloud<Common::Point>::Ptr& cloud,
+inline void projectPointCloudToImage(const pcl::PointCloud<Common::Point>::Ptr& cloud,
   const Eigen::Matrix4f& transformation,
   const cv::Mat& cameraMatrix,
   const cv::Mat& distCoeffs,
@@ -176,42 +206,33 @@ void projectPointCloudToImage(const pcl::PointCloud<Common::Point>::Ptr& cloud,
   colored_cloud->clear();
   colored_cloud->reserve(cloud->size());
 
-  // Undistort the entire image (preprocess outside if possible)
   cv::Mat undistortedImage;
   cv::undistort(image, undistortedImage, cameraMatrix, distCoeffs);
 
-  // Precompute rotation and translation vectors (zero for this case)
   cv::Mat rvec = cv::Mat::zeros(3, 1, CV_32F);
   cv::Mat tvec = cv::Mat::zeros(3, 1, CV_32F);
   cv::Mat zeroDistCoeffs = cv::Mat::zeros(5, 1, CV_32F);
 
-  // Preallocate memory for projection
   std::vector<cv::Point3f> objectPoints(1);
   std::vector<cv::Point2f> imagePoints(1);
 
   for (const auto& point : *cloud) 
   {
-    // Transform the point
     Eigen::Vector4f homogeneous_point(point.x, point.y, point.z, 1.0f);
     Eigen::Vector4f transformed_point = transformation * homogeneous_point;
 
-    // Skip points behind the camera
     if (transformed_point(2) < 0) continue;
 
-    // Project the point to the image plane
     objectPoints[0] = cv::Point3f(transformed_point(0), transformed_point(1), transformed_point(2));
     cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, zeroDistCoeffs, imagePoints);
 
     int u = static_cast<int>(imagePoints[0].x);
     int v = static_cast<int>(imagePoints[0].y);
 
-    // Check if the point is within the image bounds
     if (u >= 0 && u < undistortedImage.cols && v >= 0 && v < undistortedImage.rows) 
     {
-      // Get the color from the undistorted image
       cv::Vec3b color = undistortedImage.at<cv::Vec3b>(v, u);
 
-      // Create a colored point and add it to the cloud
       pcl::PointXYZRGB colored_point;
       colored_point.x = transformed_point(0);
       colored_point.y = transformed_point(1);
@@ -224,7 +245,7 @@ void projectPointCloudToImage(const pcl::PointCloud<Common::Point>::Ptr& cloud,
   }
 }
 
-void saveTargetHoleCenters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& lidar_centers,
+inline void saveTargetHoleCenters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& lidar_centers,
                       const pcl::PointCloud<pcl::PointXYZ>::Ptr& qr_centers,
                       const Params& params)
 {
@@ -242,7 +263,6 @@ void saveTargetHoleCenters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& lidar_cent
         return;
     }
 
-    // 获取当前系统时间
     auto now = std::chrono::system_clock::now();
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     saveFile << "time: " << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << std::endl;
@@ -261,7 +281,7 @@ void saveTargetHoleCenters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& lidar_cent
     std::cout << BOLDGREEN << "[Record] Saved four pairs of circular hole centers to " << BOLDWHITE << saveDir << "circle_center_record.txt" << RESET << std::endl;
 }
 
-void saveCalibrationResults(const Params& params, const Eigen::Matrix4f& transformation, 
+inline void saveCalibrationResults(const Params& params, const Eigen::Matrix4f& transformation, 
      const pcl::PointCloud<pcl::PointXYZRGB>::Ptr& colored_cloud, const cv::Mat& img_input)
 {
   if(colored_cloud->empty()) 
@@ -317,7 +337,7 @@ void saveCalibrationResults(const Params& params, const Eigen::Matrix4f& transfo
   imwrite(outputDir + "qr_detect.png", img_input);
 }
 
-void sortPatternCenters(pcl::PointCloud<pcl::PointXYZ>::Ptr pc,
+inline void sortPatternCenters(pcl::PointCloud<pcl::PointXYZ>::Ptr pc,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr v,
                         const std::string& axis_mode = "camera") 
 {
@@ -328,26 +348,22 @@ void sortPatternCenters(pcl::PointCloud<pcl::PointXYZ>::Ptr pc,
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr work_pc(new pcl::PointCloud<pcl::PointXYZ>());
 
-  // Coordinate transformation (LiDAR -> Camera)
   if (axis_mode == "lidar") {
     for (const auto& p : *pc) {
       pcl::PointXYZ pt;
-      pt.x = -p.y;   // LiDAR Y -> Cam -X
-      pt.y = -p.z;   // LiDAR Z -> Cam -Y
-      pt.z = p.x;    // LiDAR X -> Cam Z
+      pt.x = -p.y;
+      pt.y = -p.z;
+      pt.z = p.x;
       work_pc->push_back(pt);
     }
   } else {
     *work_pc = *pc;
   }
 
-  // --- Sorting based on the local coordinate system of the pattern ---
-  // 1. Calculate the centroid of the points
   Eigen::Vector4f centroid;
   pcl::compute3DCentroid(*work_pc, centroid);
   pcl::PointXYZ ref_origin(centroid[0], centroid[1], centroid[2]);
 
-  // 2. Project points to the XY plane relative to the centroid and calculate angles
   std::vector<std::pair<float, int>> proj_points;
   for (size_t i = 0; i < work_pc->size(); ++i) {
     const auto& p = work_pc->points[i];
@@ -355,16 +371,13 @@ void sortPatternCenters(pcl::PointCloud<pcl::PointXYZ>::Ptr pc,
     proj_points.emplace_back(atan2(rel_vec.y(), rel_vec.x()), i);
   }
 
-  // 3. Sort points based on the calculated angle
   std::sort(proj_points.begin(), proj_points.end());
 
-  // 4. Output the sorted points into the result vector 'v'
   v->resize(4);
   for (int i = 0; i < 4; ++i) {
     (*v)[i] = work_pc->points[proj_points[i].second];
   }
 
-  // 5. Verify the order (ensure it's counter-clockwise) and fix if necessary
   const auto& p0 = v->points[0];
   const auto& p1 = v->points[1];
   const auto& p2 = v->points[2];
@@ -374,12 +387,11 @@ void sortPatternCenters(pcl::PointCloud<pcl::PointXYZ>::Ptr pc,
     std::swap((*v)[1], (*v)[3]);
   }
 
-  // 6. If the original input was in the lidar frame, transform the sorted points back
   if (axis_mode == "lidar") {
     for (auto& point : v->points) {
-      float x_new = point.z;    // Cam Z -> LiDAR X
-      float y_new = -point.x;   // Cam -X -> LiDAR Y
-      float z_new = -point.y;   // Cam -Y -> LiDAR Z
+      float x_new = point.z;
+      float y_new = -point.x;
+      float z_new = -point.y;
       point.x = x_new;
       point.y = y_new;
       point.z = z_new;
@@ -401,9 +413,8 @@ class Square
       _target_height = height;
       _target_diagonal = sqrt(pow(width, 2) + pow(height, 2));
  
-      // Compute candidates centroid
       _center.x = _center.y = _center.z = 0;
-      for (int i = 0; i < candidates.size(); ++i) {
+      for (size_t i = 0; i < candidates.size(); ++i) {
         _center.x += candidates[i].x;
         _center.y += candidates[i].y;
         _center.z += candidates[i].z;
@@ -424,10 +435,6 @@ class Square
       return _candidates[i];
     }
  
-    // ==================================================================================================
-    // The original is_valid() was too rigid. This version is more robust by checking for two possible
-    // orderings of the side lengths (width-height vs. height-width) after angular sorting.
-    // ==================================================================================================
     bool is_valid() 
     {
       if (_candidates.size() != 4) return false;
@@ -435,33 +442,27 @@ class Square
       pcl::PointCloud<pcl::PointXYZ>::Ptr candidates_cloud(new pcl::PointCloud<pcl::PointXYZ>());
       for(const auto& p : _candidates) candidates_cloud->push_back(p);
 
-      // Check if candidates are at a reasonable distance from their centroid
-      for (int i = 0; i < _candidates.size(); ++i) {
+      for (size_t i = 0; i < _candidates.size(); ++i) {
         float d = distance(_center, _candidates[i]);
-        // Check if distance from center to corner is close to half the diagonal length
-        if (fabs(d - _target_diagonal / 2.) / (_target_diagonal / 2.) > GEOMETRY_TOLERANCE * 2.0) { // Loosened tolerance slightly
+        if (fabs(d - _target_diagonal / 2.) / (_target_diagonal / 2.) > GEOMETRY_TOLERANCE * 2.0) {
           return false;
         }
       }
       
-      // Sort the corners counter-clockwise
       pcl::PointCloud<pcl::PointXYZ>::Ptr sorted_centers(new pcl::PointCloud<pcl::PointXYZ>());
       sortPatternCenters(candidates_cloud, sorted_centers, "camera");
       
-      // Get the four side lengths from the sorted points
       float s01 = distance(sorted_centers->points[0], sorted_centers->points[1]);
       float s12 = distance(sorted_centers->points[1], sorted_centers->points[2]);
       float s23 = distance(sorted_centers->points[2], sorted_centers->points[3]);
       float s30 = distance(sorted_centers->points[3], sorted_centers->points[0]);
 
-      // Check for pattern 1: width, height, width, height
       bool pattern1_ok = 
         (fabs(s01 - _target_width) / _target_width < GEOMETRY_TOLERANCE) &&
         (fabs(s12 - _target_height) / _target_height < GEOMETRY_TOLERANCE) &&
         (fabs(s23 - _target_width) / _target_width < GEOMETRY_TOLERANCE) &&
         (fabs(s30 - _target_height) / _target_height < GEOMETRY_TOLERANCE);
 
-      // Check for pattern 2: height, width, height, width
       bool pattern2_ok = 
         (fabs(s01 - _target_height) / _target_height < GEOMETRY_TOLERANCE) &&
         (fabs(s12 - _target_width) / _target_width < GEOMETRY_TOLERANCE) &&
@@ -472,7 +473,6 @@ class Square
         return false;
       }
       
-      // Final check on perimeter
       float perimeter = s01 + s12 + s23 + s30;
       float ideal_perimeter = 2 * (_target_width + _target_height);
       if (fabs(perimeter - ideal_perimeter) / ideal_perimeter > GEOMETRY_TOLERANCE) {
