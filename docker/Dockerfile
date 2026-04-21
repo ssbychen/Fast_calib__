@@ -2,6 +2,8 @@ FROM ros:noetic-perception
 
 RUN apt-get update && apt-get install -y \
     ros-noetic-rviz \
+    # To enable VS Code debugging outside the container
+    gdb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/catkin_ws/src
