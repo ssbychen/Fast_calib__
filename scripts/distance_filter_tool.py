@@ -329,7 +329,7 @@ if __name__ == "__main__":
     input_path = sys.argv[1]
 
     if input_path.lower().endswith(".pcd"):
-        output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(input_path) or os.getcwd()
+        output_dir = sys.argv[2] if len(sys.argv) > 2 else None
         result = process_pcd_file(input_path, output_dir=output_dir)
         sys.exit(0 if result else 1)
 
