@@ -1,3 +1,6 @@
 calib_data/*
 output/*
 build/*
+
+__pycache__/
+*.pyc

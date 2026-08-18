@@ -54,6 +54,39 @@ roslaunch fast_calib multi_calib.launch
 5. Calibrate now!
 
 💡 **Note:** You can run `scripts/distance_filter_tool.py` to quickly obtain suitable filter parameters from a rosbag or an existing `.pcd` file, for example `python scripts/distance_filter_tool.py /path/to/cloud.pcd`.
+
+### Automatic circle detection from a `.pcd` file
+
+Once you have a `.pcd` file and know the rough distance filter bounds (from the step above), you can directly compute the four circular-hole coordinates of the calibration board in the LiDAR frame without ROS:
+
+```bash
+python scripts/distance_filter_tool.py --pcd mid_360.pcd \
+    --x_min 2.3 --x_max 4.8 \
+    --y_min -0.7 --y_max 3.2 \
+    --z_min -0.1 --z_max 1.9
+```
+
+Optional arguments (defaults match `config/qr_params.yaml`):
+
+| Argument | Default | Description |
+|---|---|---|
+| `--circle_radius` | `0.12` | Hole radius (m) |
+| `--delta_width_circles` | `0.5` | Horizontal distance between circle centres (m) |
+| `--delta_height_circles` | `0.4` | Vertical distance between circle centres (m) |
+| `--output` | `<pcd_name>_circles.json` | Path to save the result JSON |
+
+**Expected output (stdout + JSON file):**
+```
+[Circle] ===== 标定板四个圆孔坐标（LiDAR 坐标系）=====
+  圆孔 1: x=3.0001  y=-0.2498  z=-0.1997
+  圆孔 2: x=3.0002  y= 0.2503  z= 0.2001
+  圆孔 3: x=2.9999  y= 0.2497  z=-0.2003
+  圆孔 4: x=3.0000  y=-0.2501  z= 0.1996
+[Circle] ============================================
+[Circle] 结果已保存到: mid_360_circles.json
+```
+
+The JSON file contains the input parameters and the four hole coordinates, suitable for further processing or integration with the calibration pipeline.
 <p align="center">
   <img src="./pics/calibration_target.jpg" width="100%">
   <font color=#a0a0a0 size=2>Left: Actual calibration target | Right: Technical drawing with annotated dimensions.</font>
