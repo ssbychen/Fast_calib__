@@ -53,7 +53,7 @@ roslaunch fast_calib multi_calib.launch
 4. Set distance filter in `qr_params.yaml` for board point cloud (extra points are acceptable).
 5. Calibrate now!
 
-💡 **Note:** You can run `scripts/distance_filter_tool.py` to quickly obtain suitable filter parameters.
+💡 **Note:** You can run `scripts/distance_filter_tool.py` to quickly obtain suitable filter parameters from a rosbag or an existing `.pcd` file, for example `python scripts/distance_filter_tool.py /path/to/cloud.pcd`.
 <p align="center">
   <img src="./pics/calibration_target.jpg" width="100%">
   <font color=#a0a0a0 size=2>Left: Actual calibration target | Right: Technical drawing with annotated dimensions.</font>
