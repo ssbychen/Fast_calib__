@@ -15,16 +15,25 @@
     - open3d, numpy
 
 用法示例：
-    python FAST-Calib-tool.py
-    python FAST-Calib-tool.py /path/to/data.bag /path/to/output_dir
+    python scripts/distance_filter_tool.py /path/to/data.bag /path/to/output_dir
+    python scripts/distance_filter_tool.py /path/to/cloud.pcd
+    python scripts/distance_filter_tool.py /path/to/cloud.pcd /path/to/output_dir
 """
 
 import os
 import sys
 import numpy as np
-import rosbag
-import sensor_msgs.point_cloud2 as pc2
 import open3d as o3d
+
+def import_rosbag_dependencies():
+    """按需导入 rosbag 相关依赖，避免纯 PCD 模式受 ROS 环境限制。"""
+    try:
+        import rosbag
+        import sensor_msgs.point_cloud2 as pc2
+    except ImportError as exc:
+        print(f"[ERROR] 处理 rosbag 需要 ROS Python 依赖: {exc}", file=sys.stderr)
+        return None, None
+    return rosbag, pc2
 
 # ===================== 通用：保存 PCD =====================
 
@@ -73,6 +82,10 @@ def convert_pointcloud2_bag_to_pcd(
     将 rosbag 中 PointCloud2 类型的点云合并导出为一个 PCD 文件。
     保持原始雷达坐标，不做坐标变换。
     """
+    rosbag, pc2 = import_rosbag_dependencies()
+    if rosbag is None or pc2 is None:
+        return None
+
     print(f"[Bag] 打开 rosbag: {bag_file}")
     bag = rosbag.Bag(bag_file, "r")
 
@@ -143,6 +156,10 @@ def convert_livox_custom_bag_to_pcd(
     将 rosbag 中 livox_ros_driver/CustomMsg 类型的点云合并导出为一个 PCD 文件。
     保持原始雷达坐标，不做坐标变换。
     """
+    rosbag, _ = import_rosbag_dependencies()
+    if rosbag is None:
+        return None
+
     print(f"[Bag] 打开 rosbag: {bag_file}")
     bag = rosbag.Bag(bag_file, "r")
 
@@ -177,6 +194,10 @@ def detect_lidar_msg_type(bag_file):
         "PointCloud2", "CustomMsg", 或 None
     如果两种都有，默认优先 PointCloud2,并打印提示。
     """
+    rosbag, _ = import_rosbag_dependencies()
+    if rosbag is None:
+        return None
+
     has_pc2 = False
     has_livox = False
 
@@ -207,67 +228,41 @@ def detect_lidar_msg_type(bag_file):
         print("[Detect] 未检测到 PointCloud2 或 Livox CustomMsg 点云。")
         return None
 
-# ===================== Open3D 交互选点 & 保存范围 =====================
-
-def select_and_save_points(pcd_folder, target_pcd_name):
-    """
-    在给定目录中读取指定 PCD 文件，用 Open3D 交互式选点并保存范围。
-    """
-    pcd_path = os.path.join(pcd_folder, target_pcd_name)
-    if not os.path.isfile(pcd_path):
-        print(f"[ERROR] 指定的 PCD 文件不存在: {pcd_path}", file=sys.stderr)
-        return
-
-    # 读取点云
-    pcd = o3d.io.read_point_cloud(pcd_path)
-    if not pcd.has_points():
-        print(f"[ERROR] {target_pcd_name} 中没有点云数据，已跳过", file=sys.stderr)
-        return
-
-    print(f"\n正在处理: {target_pcd_name}")
+def pick_points_from_cloud(pcd, target_name):
+    """对点云进行交互选点，返回前 4 个选中点。"""
+    print(f"\n正在处理: {target_name}")
     print("请在可视化窗口中按住 Shift 用鼠标左键选择点(至少4个)，然后按 Q 键关闭窗口")
 
-    # 创建可视化窗口并添加点云
     vis = o3d.visualization.VisualizerWithEditing()
-    vis.create_window(window_name=f"选择点 - {target_pcd_name}")
+    vis.create_window(window_name=f"选择点 - {target_name}")
     vis.add_geometry(pcd)
-
-    # 等待用户交互（Shift+左键选点, Q 退出）
     vis.run()
     vis.destroy_window()
 
-    # 获取用户选择的点的索引
     selected_indices = vis.get_picked_points()
-
     if not selected_indices:
-        print(f"[ERROR] 未选择任何点，{target_pcd_name} 没有保存文件", file=sys.stderr)
-        return
+        print(f"[ERROR] 未选择任何点，{target_name} 没有保存文件", file=sys.stderr)
+        return None
 
     if len(selected_indices) < 4:
         print(f"[ERROR] 只选中了 {len(selected_indices)} 个点，少于 4 个，跳过该文件", file=sys.stderr)
-        return
-
-    # 只取前 4 个点
-    selected_indices = selected_indices[:4]
+        return None
 
     all_points = np.asarray(pcd.points)
-    selected_points = all_points[selected_indices, :]  # 形状 (4, 3)
+    return all_points[selected_indices[:4], :]
 
-    # 计算四个点在各轴上的最小值和最大值
-    mins = selected_points.min(axis=0)  # [x_min_raw, y_min_raw, z_min_raw]
-    maxs = selected_points.max(axis=0)  # [x_max_raw, y_max_raw, z_max_raw]
 
-    # 按你的定义扩展 0.2m
+def save_selected_points_and_ranges(selected_points, save_file):
+    """保存选中点及其扩展 0.2m 后的 xyz 范围。"""
+    mins = selected_points.min(axis=0)
+    maxs = selected_points.max(axis=0)
+
     x_min = mins[0] - 0.2
     x_max = maxs[0] + 0.2
     y_min = mins[1] - 0.2
     y_max = maxs[1] + 0.2
     z_min = mins[2] - 0.2
     z_max = maxs[2] + 0.2
-
-    # 生成保存文件名 (与 PCD 文件同名，改为 txt)
-    base_name = os.path.splitext(target_pcd_name)[0]
-    save_file = os.path.join(pcd_folder, f"{base_name}.txt")
 
     with open(save_file, 'w') as f:
         f.write("# 4 selected points (x y z)\n")
@@ -284,18 +279,61 @@ def select_and_save_points(pcd_folder, target_pcd_name):
 
     print(f"[Save] 已保存选点与范围到: {save_file}")
     print("点云处理完成。")
+    return save_file
+
+
+def process_pcd_file(pcd_path, output_dir=None):
+    """直接处理现有 PCD 文件并保存同名 txt。"""
+    if not os.path.isfile(pcd_path):
+        print(f"[ERROR] PCD 文件不存在: {pcd_path}", file=sys.stderr)
+        return None
+
+    if output_dir is None:
+        output_dir = os.path.dirname(pcd_path) or os.getcwd()
+
+    if not os.path.isdir(output_dir):
+        print(f"[ERROR] 输出目录 '{output_dir}' 不存在", file=sys.stderr)
+        return None
+
+    pcd = o3d.io.read_point_cloud(pcd_path)
+    target_name = os.path.basename(pcd_path)
+    if not pcd.has_points():
+        print(f"[ERROR] {target_name} 中没有点云数据，已跳过", file=sys.stderr)
+        return None
+
+    selected_points = pick_points_from_cloud(pcd, target_name)
+    if selected_points is None:
+        return None
+
+    base_name = os.path.splitext(target_name)[0]
+    save_file = os.path.join(output_dir, f"{base_name}.txt")
+    return save_selected_points_and_ranges(selected_points, save_file)
+
+
+# ===================== Open3D 交互选点 & 保存范围 =====================
+
+def select_and_save_points(pcd_folder, target_pcd_name):
+    """
+    在给定目录中读取指定 PCD 文件，用 Open3D 交互式选点并保存范围。
+    """
+    pcd_path = os.path.join(pcd_folder, target_pcd_name)
+    return process_pcd_file(pcd_path, output_dir=pcd_folder)
 
 # ===================== main =====================
 
 if __name__ == "__main__":
-    # 1) 解析命令行参数：bag 路径 & 输出目录
-    if len(sys.argv) > 1:
-        bag_file = sys.argv[1]
-    else:
-        # 默认使用当前目录下的某个 bag，可以按需修改
-        bag_file = os.path.join(os.getcwd(), "all_2025-11-17-18-22-27.bag")
-        print(f"未指定 bag 文件，默认使用: {bag_file}")
+    if len(sys.argv) < 2:
+        print("用法：python scripts/distance_filter_tool.py <bag|pcd> [output_dir]", file=sys.stderr)
+        sys.exit(1)
 
+    input_path = sys.argv[1]
+
+    if input_path.lower().endswith(".pcd"):
+        output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+        result = process_pcd_file(input_path, output_dir=output_dir)
+        sys.exit(0 if result else 1)
+
+    bag_file = input_path
     if len(sys.argv) > 2:
         output_dir = sys.argv[2]
     else:
@@ -310,9 +348,6 @@ if __name__ == "__main__":
         print(f"[ERROR] 输出目录 '{output_dir}' 不存在", file=sys.stderr)
         sys.exit(1)
 
-    # 不需要 rospy.init_node，完全离线工具
-
-    # 3) 自动检测 bag 中点云类型
     msg_type = detect_lidar_msg_type(bag_file)
     if msg_type is None:
         print("[ERROR] 未检测到支持的雷达消息类型，退出。", file=sys.stderr)
