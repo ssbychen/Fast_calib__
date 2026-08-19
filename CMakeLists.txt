@@ -43,3 +43,15 @@ target_link_libraries(multi_fast_calib
   ${PCL_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
+
+add_executable(camera_circle_demo
+  camera_circle_detector/demo_detect_circles.cpp
+  camera_circle_detector/CameraCircleCenterDetector.cpp
+)
+target_include_directories(camera_circle_demo PRIVATE
+  camera_circle_detector
+  ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(camera_circle_demo
+  ${OpenCV_LIBRARIES}
+)
