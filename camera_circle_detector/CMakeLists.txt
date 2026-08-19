@@ -47,5 +47,5 @@ target_include_directories(camera_circle_demo PRIVATE
 )
 target_link_libraries(camera_circle_demo PRIVATE
     camera_circle_detector
-    opencv_highgui
+    ${OpenCV_LIBRARIES}
 )

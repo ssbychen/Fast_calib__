@@ -59,7 +59,7 @@ You can run a minimal camera-side circle detector (no ROS/PCL in the demo path) 
 
 ```bash
 catkin_make
-./devel/lib/fast_calib/camera_circle_demo <input.jpg> [output.jpg] [config/qr_params.yaml]
+./devel/lib/fast_calib/camera_circle_demo <input.jpg> [output.jpg] [config.yaml]
 ```
 
 The demo:

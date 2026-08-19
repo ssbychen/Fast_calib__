@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
   }
 
   double fx = 0.0, fy = 0.0, cx = 0.0, cy = 0.0;
-  double k1 = 0.0, k2 = 0.0, p1 = 0.0, p2 = 0.0;
+  double k1 = 0.0, k2 = 0.0, p1 = 0.0, p2 = 0.0, k3 = 0.0;
   float marker_size = 0.0f, delta_width_qr_center = 0.0f,
         delta_height_qr_center = 0.0f, delta_width_circles = 0.0f,
         delta_height_circles = 0.0f;
@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
               << "\n";
     return 1;
   }
+  (void)readDouble(fs, "k3", k3);
 
   cv::Mat image = cv::imread(inputImagePath, cv::IMREAD_COLOR);
   if (image.empty()) {
@@ -83,7 +84,7 @@ int main(int argc, char** argv) {
 
   cv::Mat K =
       (cv::Mat_<double>(3, 3) << fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0);
-  cv::Mat D = (cv::Mat_<double>(1, 5) << k1, k2, p1, p2, 0.0);
+  cv::Mat D = (cv::Mat_<double>(1, 5) << k1, k2, p1, p2, k3);
 
   CameraCircleCenterDetector detector(marker_size, delta_width_qr_center,
                                       delta_height_qr_center,
