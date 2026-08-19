@@ -53,6 +53,21 @@ roslaunch fast_calib multi_calib.launch
 4. Set distance filter in `qr_params.yaml` for board point cloud (extra points are acceptable).
 5. Calibrate now!
 
+### OpenCV-only camera circle center demo
+
+You can run a minimal camera-side circle detector (no ROS/PCL in the demo path) with:
+
+```bash
+catkin_make
+./devel/lib/fast_calib/camera_circle_demo <input.jpg> [output.jpg] [config/qr_params.yaml]
+```
+
+The demo:
+- reads the image from command line
+- runs `CameraCircleCenterDetector`
+- prints circle centers in fixed order: `left-top`, `right-top`, `left-bottom`, `right-bottom`
+- draws labeled points and saves the annotated image
+
 💡 **Note:** You can run `scripts/distance_filter_tool.py` to quickly obtain suitable filter parameters from a rosbag or an existing `.pcd` file, for example `python scripts/distance_filter_tool.py /path/to/cloud.pcd`.
 
 ### Automatic circle detection from a `.pcd` file

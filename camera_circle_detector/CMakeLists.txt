@@ -39,3 +39,13 @@ target_link_libraries(detect_circles PRIVATE
     camera_circle_detector
     opencv_highgui   # for cv::imread / cv::imshow
 )
+
+add_executable(camera_circle_demo demo_detect_circles.cpp)
+target_include_directories(camera_circle_demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(camera_circle_demo PRIVATE
+    camera_circle_detector
+    opencv_highgui
+)
